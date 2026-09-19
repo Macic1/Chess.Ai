@@ -1,10 +1,11 @@
 import React from 'react';
-import { PieceType } from '../types';
+import { PieceType, PieceCustomizationState } from '../types';
 import { PieceIcon } from './PieceIcon';
 
 interface CapturedPiecesProps {
-  whiteCaptured: PieceType[];
-  blackCaptured: PieceType[];
+  whiteCaptured?: PieceType[];
+  blackCaptured?: PieceType[];
+  pieceCustomization?: PieceCustomizationState;
 }
 
 const PIECE_VALUES: Record<PieceType, number> = {
@@ -16,9 +17,15 @@ const PIECE_VALUES: Record<PieceType, number> = {
   k: 0,
 };
 
-export const CapturedPieces: React.FC<CapturedPiecesProps> = ({ whiteCaptured, blackCaptured }) => {
-  const whitePoints = whiteCaptured.reduce((acc, p) => acc + (PIECE_VALUES[p] || 0), 0);
-  const blackPoints = blackCaptured.reduce((acc, p) => acc + (PIECE_VALUES[p] || 0), 0);
+export const CapturedPieces: React.FC<CapturedPiecesProps> = ({
+  whiteCaptured = [],
+  blackCaptured = [],
+  pieceCustomization,
+}) => {
+  const safeWhite = whiteCaptured || [];
+  const safeBlack = blackCaptured || [];
+  const whitePoints = safeWhite.reduce((acc, p) => acc + (PIECE_VALUES[p] || 0), 0);
+  const blackPoints = safeBlack.reduce((acc, p) => acc + (PIECE_VALUES[p] || 0), 0);
 
   const whiteLead = whitePoints - blackPoints;
   const blackLead = blackPoints - whitePoints;
@@ -29,8 +36,14 @@ export const CapturedPieces: React.FC<CapturedPiecesProps> = ({ whiteCaptured, b
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[11px] font-bold text-stone-300">Weiß:</span>
         <div className="flex items-center -space-x-1">
-          {whiteCaptured.map((p, i) => (
-            <PieceIcon key={i} type={p} color="b" className="w-4.5 h-4.5 drop-shadow-sm" />
+          {safeWhite.map((p, i) => (
+            <PieceIcon
+              key={i}
+              type={p}
+              color="b"
+              className="w-4.5 h-4.5 drop-shadow-sm"
+              customization={pieceCustomization?.enabled ? pieceCustomization.black : undefined}
+            />
           ))}
         </div>
         {whiteLead > 0 && (
@@ -44,8 +57,14 @@ export const CapturedPieces: React.FC<CapturedPiecesProps> = ({ whiteCaptured, b
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[11px] font-bold text-stone-300">Schwarz:</span>
         <div className="flex items-center -space-x-1">
-          {blackCaptured.map((p, i) => (
-            <PieceIcon key={i} type={p} color="w" className="w-4.5 h-4.5 drop-shadow-sm" />
+          {safeBlack.map((p, i) => (
+            <PieceIcon
+              key={i}
+              type={p}
+              color="w"
+              className="w-4.5 h-4.5 drop-shadow-sm"
+              customization={pieceCustomization?.enabled ? pieceCustomization.white : undefined}
+            />
           ))}
         </div>
         {blackLead > 0 && (

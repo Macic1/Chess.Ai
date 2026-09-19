@@ -1,6 +1,6 @@
 {
   "name": "Chess with AI Enemies",
-  "description": "Play chess against unique AI enemies with distinct personalities, tactical styles, and dynamic commentary.",
+  "description": "Schach spielen gegen einzigartige KI-Gegner, Mensch-vs-Mensch Online-Lobbys mit Raum-Codes, individueller Figuren- & Farb-Anpassung pro Spieler sowie interaktiver Schach-Lernpfad.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

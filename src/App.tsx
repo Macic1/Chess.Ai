@@ -20,12 +20,26 @@ import { AiVsAiControls } from './components/AiVsAiControls';
 import { DebugTacticalOverlay } from './components/DebugTacticalOverlay';
 import { OpeningBanner } from './components/OpeningBanner';
 import { OpeningSelectorModal } from './components/OpeningSelectorModal';
+import { HumanVsHumanProfile } from './components/HumanVsHumanProfile';
+import { OnlineLobbyModal } from './components/OnlineLobbyModal';
+import { OnlineMatchProfile } from './components/OnlineMatchProfile';
+import { LearningPathView } from './components/LearningPathView';
 import { detectOpening } from './services/openingService';
-import { ChessOpening } from './types';
-import { Crown, Sparkles, X, ShieldAlert, Home, Swords, User, Bug, BookOpen } from 'lucide-react';
+import { onlineLobbyClient } from './services/onlineLobbyService';
+import { PieceCustomizerModal } from './components/PieceCustomizerModal';
+import { DEFAULT_PIECE_CUSTOMIZATION, ARMY_SETUPS } from './data/pieceStyles';
+import {
+  ChessOpening,
+  OnlineLobbyData,
+  OnlineChatMessage,
+  OnlinePlayer,
+  PieceCustomizationState,
+  ArmySetupType,
+} from './types';
+import { Crown, Sparkles, X, ShieldAlert, Home, Swords, User, Users, Bug, BookOpen, Globe, Palette } from 'lucide-react';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<'title' | 'game'>('title');
+  const [currentView, setCurrentView] = useState<'title' | 'game' | 'learning'>('title');
   const [gameMode, setGameMode] = useState<GameMode>('pvai');
   const [game, setGame] = useState<Chess>(() => new Chess());
   const [enemy, setEnemy] = useState<AIEnemy>(AI_ENEMIES[1]); // Default to Felix Schneider
@@ -35,6 +49,101 @@ export default function App() {
   const [capturedPieces, setCapturedPieces] = useState<{ w: PieceType[]; b: PieceType[] }>({ w: [], b: [] });
   const [evalScore, setEvalScore] = useState<number>(0);
   const [isOpeningSelectorOpen, setIsOpeningSelectorOpen] = useState<boolean>(false);
+
+  // Online Multiplayer State
+  const [isOnlineModalOpen, setIsOnlineModalOpen] = useState<boolean>(false);
+  const [onlineLobby, setOnlineLobby] = useState<OnlineLobbyData | null>(null);
+  const [onlinePlayerId, setOnlinePlayerId] = useState<string | null>(null);
+  const [onlineChatMessages, setOnlineChatMessages] = useState<OnlineChatMessage[]>([]);
+  const [initialRoomCode, setInitialRoomCode] = useState<string>('');
+
+  // Custom pieces & army setup configuration (Regular vs Custom per player)
+  const [pieceCustomization, setPieceCustomization] = useState<PieceCustomizationState>(() => {
+    try {
+      const saved = localStorage.getItem('chess_piece_customization');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return DEFAULT_PIECE_CUSTOMIZATION;
+  });
+  const [isPieceCustomizerOpen, setIsPieceCustomizerOpen] = useState<boolean>(false);
+  const [pieceCustomizerTab, setPieceCustomizerTab] = useState<
+    'editor' | 'white' | 'black' | 'army' | 'presets'
+  >('editor');
+
+  const handleOpenPieceCustomizer = (
+    tab: 'editor' | 'white' | 'black' | 'army' | 'presets' = 'editor'
+  ) => {
+    setPieceCustomizerTab(tab);
+    setIsPieceCustomizerOpen(true);
+  };
+
+  const handleUpdatePieceCustomization = (newConfig: PieceCustomizationState) => {
+    setPieceCustomization(newConfig);
+    try {
+      localStorage.setItem('chess_piece_customization', JSON.stringify(newConfig));
+    } catch {
+      // ignore
+    }
+  };
+
+  const getStartingGame = (config?: PieceCustomizationState): Chess => {
+    const cfg = config || pieceCustomization;
+    if (cfg?.enabled) {
+      if (cfg.armySetup === 'custom' && cfg.customFen) {
+        try {
+          return new Chess(cfg.customFen);
+        } catch (e) {
+          console.warn('Failed loading custom army setup FEN', e);
+        }
+      } else if (cfg.armySetup !== 'standard') {
+        const army = ARMY_SETUPS.find((a) => a.id === cfg.armySetup);
+        if (army?.fen) {
+          try {
+            return new Chess(army.fen);
+          } catch {
+            // fallback
+          }
+        }
+      }
+    }
+    return new Chess();
+  };
+
+  const handleRestartWithNewArmy = (newArmyType: ArmySetupType) => {
+    let freshGame: Chess;
+    if (newArmyType === 'custom' && pieceCustomization.customFen) {
+      try {
+        freshGame = new Chess(pieceCustomization.customFen);
+      } catch {
+        freshGame = new Chess();
+      }
+    } else if (newArmyType !== 'standard') {
+      const army = ARMY_SETUPS.find((a) => a.id === newArmyType);
+      if (army?.fen) {
+        try {
+          freshGame = new Chess(army.fen);
+        } catch {
+          freshGame = new Chess();
+        }
+      } else {
+        freshGame = new Chess();
+      }
+    } else {
+      freshGame = new Chess();
+    }
+    setGame(freshGame);
+    setHistory([]);
+    setCapturedPieces({ w: [], b: [] });
+    setLastMove(null);
+    setHintMove(null);
+    setHintText(null);
+    setIsGameOver(false);
+    setWinner(null);
+    setGameOverReason('');
+    setEvalScore(0);
+  };
 
   // AI vs AI Mode state
   const [whiteEnemy, setWhiteEnemy] = useState<AIEnemy>(AI_ENEMIES[1]); // Felix Schneider
@@ -76,7 +185,7 @@ export default function App() {
   // Recalculate tactical analysis on every move when in debug mode
   const debugAnalysis = useMemo(() => {
     if (!isDebugMode) return null;
-    const activeColor = gameMode === 'aivsai' ? (game.turn() as PlayerColor) : playerColor;
+    const activeColor = (gameMode === 'aivsai' || gameMode === 'pvp') ? (game.turn() as PlayerColor) : playerColor;
     return performTacticalDebugAnalysis(game, activeColor, lastMove);
   }, [game, lastMove, isDebugMode, gameMode, playerColor, history.length]);
 
@@ -220,6 +329,104 @@ export default function App() {
     },
     [enemy.name, fetchCommentary, playerColor]
   );
+
+  // Check URL query params for ?join=CODE on initial mount
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const joinCode = params.get('join');
+      if (joinCode) {
+        setInitialRoomCode(joinCode.toUpperCase());
+        setIsOnlineModalOpen(true);
+      }
+    } catch {}
+  }, []);
+
+  // Listen to Online Multiplayer updates
+  useEffect(() => {
+    const unsubLobby = onlineLobbyClient.onLobbyUpdate((lobby) => {
+      setOnlineLobby(lobby);
+
+      if (gameMode === 'online') {
+        // Sync board state if FEN differs
+        if (lobby.fen && lobby.fen !== game.fen()) {
+          try {
+            game.load(lobby.fen);
+            if (lobby.lastMove) {
+              setLastMove({
+                from: lobby.lastMove.from as Square,
+                to: lobby.lastMove.to as Square,
+              });
+            }
+            if (game.inCheck()) {
+              soundFx.playCheck();
+            } else if (lobby.lastMove && 'captured' in lobby.lastMove && lobby.lastMove.captured) {
+              soundFx.playCapture();
+            } else {
+              soundFx.playMove();
+            }
+
+            // Sync captured pieces
+            if (lobby.capturedPieces) {
+              setCapturedPieces({
+                w: (lobby.capturedPieces.w || []) as PieceType[],
+                b: (lobby.capturedPieces.b || []) as PieceType[],
+              });
+            }
+
+            // Sync move history
+            const movesList = lobby.moves || lobby.history;
+            if (movesList && Array.isArray(movesList)) {
+              setHistory(
+                movesList.map((m) => ({
+                  san: m.san,
+                  from: m.from as Square,
+                  to: m.to as Square,
+                  piece: (m.piece as PieceType) || 'p',
+                  color: m.color,
+                  captured: m.captured as PieceType | undefined,
+                  promotion: m.promotion as PieceType | undefined,
+                  fenAfter: m.fenAfter,
+                }))
+              );
+            }
+
+            setEvalScore(evaluateBoard(game, AI_ENEMIES[1]));
+          } catch (e) {
+            console.warn('[Sync board error]', e);
+          }
+        }
+
+        // Check if game status changed to game_over
+        if (lobby.status === 'game_over') {
+          setIsGameOver(true);
+          setWinner(lobby.winner || null);
+          setGameOverReason(lobby.winReason || lobby.gameOverReason || 'Partie beendet.');
+          if (lobby.winner === playerColor) {
+            soundFx.playVictory();
+          } else if (lobby.winner === 'draw') {
+            soundFx.playDraw();
+          } else {
+            soundFx.playDefeat();
+          }
+        } else if (lobby.status === 'playing' && isGameOver) {
+          // Rematch started!
+          setIsGameOver(false);
+          setWinner(null);
+          setGameOverReason('');
+        }
+      }
+    });
+
+    const unsubChat = onlineLobbyClient.onChat((msg) => {
+      setOnlineChatMessages((prev) => [...prev, msg]);
+    });
+
+    return () => {
+      unsubLobby();
+      unsubChat();
+    };
+  }, [game, gameMode, isGameOver, playerColor]);
 
   // Execute AI Enemy turn
   const handleAiTurn = useCallback(async () => {
@@ -426,12 +633,19 @@ export default function App() {
   const handlePlayerMove = (from: Square, to: Square, promotion?: PieceType): boolean => {
     if (isAiThinking || isGameOver) return false;
 
+    // Check if it's the player's turn in online mode
+    if (gameMode === 'online') {
+      if (game.turn() !== playerColor) {
+        return false;
+      }
+    }
+
     // Check for promotion required
     const piece = game.get(from);
     if (
       piece?.type === 'p' &&
       !promotion &&
-      ((playerColor === 'w' && to[1] === '8') || (playerColor === 'b' && to[1] === '1'))
+      ((piece.color === 'w' && to[1] === '8') || (piece.color === 'b' && to[1] === '1'))
     ) {
       setPendingPromotion({ from, to });
       return false;
@@ -480,8 +694,13 @@ export default function App() {
         setHistory((prev) => [...prev, moveRecord]);
         setEvalScore(evaluateBoard(game, enemy));
 
+        // If online mode, transmit move to backend and opponent
+        if (gameMode === 'online') {
+          onlineLobbyClient.makeMove(from, to, (promotion || 'q') as string);
+        }
+
         const isOver = checkGameOverState(game);
-        if (!isOver) {
+        if (!isOver && gameMode === 'pvai') {
           fetchCommentary({
             isCheck: game.inCheck(),
             lastMoveSan: executed.san,
@@ -604,7 +823,7 @@ export default function App() {
     const opp = newOpponent || enemy;
     const color = newColor || playerColor;
 
-    const freshGame = new Chess();
+    const freshGame = getStartingGame();
     setGame(freshGame);
     if (newOpponent) setEnemy(opp);
     if (newColor) setPlayerColor(color);
@@ -687,12 +906,65 @@ export default function App() {
   // Resign match
   const handleResign = () => {
     if (isGameOver) return;
+    if (gameMode === 'online') {
+      onlineLobbyClient.resign();
+      return;
+    }
     const oppColor: PlayerColor = playerColor === 'w' ? 'b' : 'w';
     setWinner(oppColor);
     setIsGameOver(true);
     setGameOverReason(`You resigned. ${enemy.name} claims victory!`);
     soundFx.playDefeat();
     setCurrentSpeech(enemy.taunts.victory[0]);
+  };
+
+  // Online game launch and controller
+  const handleStartOnlineGame = (lobby: OnlineLobbyData, myPlayerId: string) => {
+    setOnlineLobby(lobby);
+    setOnlinePlayerId(myPlayerId);
+
+    // Determine assigned color from lottery or player assignedColor
+    let assignedColor: PlayerColor = 'w';
+    if (lobby.drawLottery) {
+      assignedColor =
+        lobby.drawLottery.player1Id === myPlayerId
+          ? lobby.drawLottery.player1Color
+          : lobby.drawLottery.player2Color;
+    } else {
+      const myP = lobby.players[myPlayerId];
+      if (myP?.color) {
+        assignedColor = myP.color;
+      } else if (myP?.assignedColor) {
+        assignedColor = myP.assignedColor;
+      }
+    }
+
+    setPlayerColor(assignedColor);
+    setGameMode('online');
+    setCurrentView('game');
+    setIsOnlineModalOpen(false);
+
+    const freshGame = new Chess(lobby.fen || undefined);
+    setGame(freshGame);
+    setHistory([]);
+    setCapturedPieces({ w: [], b: [] });
+    setLastMove(null);
+    setHintMove(null);
+    setHintText(null);
+    setIsGameOver(false);
+    setWinner(null);
+    setGameOverReason('');
+    setEvalScore(0);
+    aiTurnProcessing.current = false;
+    setIsAiThinking(false);
+  };
+
+  const handleLeaveOnlineGame = () => {
+    onlineLobbyClient.leaveLobby();
+    setOnlineLobby(null);
+    setOnlinePlayerId(null);
+    setGameMode('pvai');
+    setCurrentView('title');
   };
 
   // Sound toggle
@@ -735,7 +1007,7 @@ export default function App() {
     const wBot = newWhiteBot || whiteEnemy;
     const bBot = newBlackBot || blackEnemy;
 
-    const freshGame = new Chess();
+    const freshGame = getStartingGame();
     setGame(freshGame);
     if (newWhiteBot) setWhiteEnemy(wBot);
     if (newBlackBot) setBlackEnemy(bBot);
@@ -761,6 +1033,15 @@ export default function App() {
     setCurrentView('game');
   };
 
+  // Launch PvP (Mensch gegen Mensch) from Title Screen
+  const handleStartPvPFromTitle = (chosenTheme?: BoardTheme) => {
+    setGameMode('pvp');
+    if (chosenTheme) setBoardTheme(chosenTheme);
+    setPlayerColor('w');
+    handleResetGame();
+    setCurrentView('game');
+  };
+
   // Enemy selection dispatcher
   const handleEnemySelect = (newEnemy: AIEnemy) => {
     if (enemySelectorTarget === 'white') {
@@ -775,6 +1056,14 @@ export default function App() {
     setIsSelectorOpen(false);
   };
 
+  if (currentView === 'learning') {
+    return (
+      <LearningPathView
+        onBack={() => setCurrentView('title')}
+      />
+    );
+  }
+
   if (currentView === 'title') {
     return (
       <>
@@ -787,11 +1076,28 @@ export default function App() {
           onSelectTheme={(theme) => setBoardTheme(theme)}
           onStartGame={handleStartGameFromTitle}
           onStartAiVsAi={handleStartAiVsAiFromTitle}
+          onStartPvP={handleStartPvPFromTitle}
+          onOpenLearningPath={() => setCurrentView('learning')}
+          onOpenOnlineLobby={() => setIsOnlineModalOpen(true)}
           hasActiveGame={history.length > 0 && !isGameOver}
           onResumeGame={handleResumeGameFromTitle}
           soundEnabled={soundEnabled}
           onToggleSound={handleToggleSound}
+          pieceCustomization={pieceCustomization}
+          onOpenPieceCustomizer={handleOpenPieceCustomizer}
+          onToggleCustomPieces={(enabled) =>
+            handleUpdatePieceCustomization({ ...pieceCustomization, enabled })
+          }
           onOpenOpenings={() => setIsOpeningSelectorOpen(true)}
+        />
+        <PieceCustomizerModal
+          isOpen={isPieceCustomizerOpen}
+          onClose={() => setIsPieceCustomizerOpen(false)}
+          customization={pieceCustomization}
+          onChangeCustomization={handleUpdatePieceCustomization}
+          onRestartWithNewArmy={handleRestartWithNewArmy}
+          isGameInProgress={history.length > 0 && !isGameOver}
+          initialTab={pieceCustomizerTab}
         />
         <OpeningSelectorModal
           isOpen={isOpeningSelectorOpen}
@@ -799,6 +1105,12 @@ export default function App() {
           onSelectOpening={handleSelectOpening}
           currentOpeningId={detectedOpening?.opening.id}
           currentPlayerColor={playerColor}
+        />
+        <OnlineLobbyModal
+          isOpen={isOnlineModalOpen}
+          onClose={() => setIsOnlineModalOpen(false)}
+          onStartOnlineGame={handleStartOnlineGame}
+          initialRoomCode={initialRoomCode}
         />
       </>
     );
@@ -816,10 +1128,20 @@ export default function App() {
             <h1 className="text-base sm:text-lg font-black tracking-tight text-stone-100 flex items-center gap-2">
               Schach & KI-Gegner
               <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 border border-stone-700">
-                {gameMode === 'aivsai' ? (
+                {gameMode === 'online' ? (
+                  <>
+                    <Globe className="w-3 h-3 text-amber-400" />
+                    Online-Lobby {onlineLobby ? `#${onlineLobby.id}` : ''}
+                  </>
+                ) : gameMode === 'aivsai' ? (
                   <>
                     <Swords className="w-3 h-3 text-amber-400" />
                     KI gegen KI Duell
+                  </>
+                ) : gameMode === 'pvp' ? (
+                  <>
+                    <Users className="w-3 h-3 text-amber-400" />
+                    Mensch gegen Mensch
                   </>
                 ) : (
                   <>
@@ -830,8 +1152,12 @@ export default function App() {
               </span>
             </h1>
             <p className="text-[11px] text-stone-400 hidden sm:block">
-              {gameMode === 'aivsai'
+              {gameMode === 'online'
+                ? `Online-Multiplayer: Du spielst als ${playerColor === 'w' ? 'Weiß' : 'Schwarz'} (Raum-Code: ${onlineLobby?.id || '—'})`
+                : gameMode === 'aivsai'
                 ? `Zuschauer-Modus: ${whiteEnemy.name} (Weiß) gegen ${blackEnemy.name} (Schwarz)`
+                : gameMode === 'pvp'
+                ? `Lokales 2-Spieler-Duell: Mensch (Weiß) gegen Mensch (Schwarz)`
                 : `Spiele gegen ${enemy.name} (${enemy.rating} ELO) mit lebendigen Kommentaren`}
             </p>
           </div>
@@ -858,6 +1184,35 @@ export default function App() {
               <span className="hidden md:inline">Mensch vs KI</span>
             </button>
             <button
+              id="header-mode-pvp"
+              onClick={() => {
+                if (gameMode !== 'pvp') {
+                  setGameMode('pvp');
+                  handleResetGame();
+                }
+              }}
+              className={`px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                gameMode === 'pvp'
+                  ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                  : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Mensch vs Mensch</span>
+            </button>
+            <button
+              id="header-mode-online"
+              onClick={() => setIsOnlineModalOpen(true)}
+              className={`px-2.5 py-1 rounded-lg font-medium transition flex items-center gap-1.5 cursor-pointer ${
+                gameMode === 'online'
+                  ? 'bg-amber-500 text-stone-950 font-bold shadow-xs'
+                  : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span className="hidden md:inline">Online</span>
+            </button>
+            <button
               id="header-mode-aivsai"
               onClick={() => {
                 if (gameMode !== 'aivsai') {
@@ -875,6 +1230,33 @@ export default function App() {
               <span className="hidden md:inline">KI gegen KI</span>
             </button>
           </div>
+
+          {/* Schach-Lernpfad Header Button */}
+          <button
+            id="btn-header-learning-path"
+            onClick={() => setCurrentView('learning')}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 text-amber-300 border border-amber-500/40 text-xs font-semibold transition active:scale-95 cursor-pointer shadow-sm"
+            title="Schach-Lernpfad mit 18 interaktiven Stationen starten"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden sm:inline">Lernpfad</span>
+          </button>
+
+          {/* Debug Tactical Overlay Toggle */}
+          <button
+            id="btn-header-custom-pieces"
+            onClick={() => setIsPieceCustomizerOpen(true)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition active:scale-95 cursor-pointer shadow-sm ${
+              pieceCustomization.enabled
+                ? 'bg-gradient-to-r from-amber-500/20 to-rose-500/20 text-amber-300 border-amber-500/40 hover:from-amber-500/30 hover:to-rose-500/30'
+                : 'bg-stone-800 text-stone-300 border-stone-700 hover:text-white hover:bg-stone-700'
+            }`}
+            title="Figuren & Spielaufstellung anpassen"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+            <span className="hidden md:inline">Figuren:</span>
+            <span>{pieceCustomization.enabled ? 'Individuell' : 'Regulär'}</span>
+          </button>
 
           {/* Debug Tactical Overlay Toggle */}
           <button
@@ -958,7 +1340,11 @@ export default function App() {
                 hintMove={hintMove}
                 theme={boardTheme}
                 onThemeChange={(newTheme) => setBoardTheme(newTheme)}
+                pieceCustomization={pieceCustomization}
+                onOpenPieceCustomizer={() => setIsPieceCustomizerOpen(true)}
                 isAiVsAi={gameMode === 'aivsai'}
+                isPvP={gameMode === 'pvp'}
+                isOnline={gameMode === 'online'}
                 debugMode={isDebugMode}
                 candidateMoves={debugAnalysis?.candidateMoves || []}
                 hoveredCandidateRank={hoveredCandidateRank}
@@ -986,7 +1372,11 @@ export default function App() {
 
           {/* Captured Pieces Loot Bar */}
           <div className="w-full mt-3 px-1">
-            <CapturedPieces whiteCaptured={capturedPieces.w} blackCaptured={capturedPieces.b} />
+            <CapturedPieces
+              whiteCaptured={capturedPieces.w}
+              blackCaptured={capturedPieces.b}
+              pieceCustomization={pieceCustomization}
+            />
           </div>
 
           {/* Tactical Coach Hint Callout */}
@@ -1023,6 +1413,39 @@ export default function App() {
                 isGameOver={isGameOver}
                 onFlipView={() => setPlayerColor((prev) => (prev === 'w' ? 'b' : 'w'))}
               />
+            ) : gameMode === 'online' ? (
+              <div className="w-full flex items-center justify-between p-2.5 rounded-2xl bg-stone-900/90 border border-stone-800 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="text-stone-400">Online-Partie</span>
+                  <span className="font-mono px-2 py-0.5 rounded-md bg-stone-800 text-amber-300 border border-stone-700">
+                    {onlineLobby?.id || '—'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleToggleSound}
+                    className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 font-medium cursor-pointer transition"
+                  >
+                    Sound: {soundEnabled ? 'AN' : 'AUS'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleFlipBoard}
+                    className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 font-medium cursor-pointer transition"
+                  >
+                    Brett drehen
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleResign}
+                    disabled={isGameOver}
+                    className="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 font-medium disabled:opacity-40 cursor-pointer transition"
+                  >
+                    Aufgeben
+                  </button>
+                </div>
+              </div>
             ) : (
               <GameControls
                 onNewGame={() => handleResetGame()}
@@ -1043,7 +1466,29 @@ export default function App() {
 
         {/* Right Section: Enemy Profile / Dual Profile & Move History */}
         <div className="w-full max-w-[580px] lg:max-w-sm flex flex-col gap-4">
-          {gameMode === 'aivsai' ? (
+          {gameMode === 'online' ? (
+            <OnlineMatchProfile
+              lobby={
+                onlineLobby || {
+                  id: '------',
+                  status: 'playing',
+                  players: {},
+                  currentTurn: game.turn() as PlayerColor,
+                  createdAt: Date.now(),
+                  lastActive: Date.now(),
+                }
+              }
+              myPlayerId={onlinePlayerId || 'p1'}
+              onResign={handleResign}
+              onOfferDraw={() => onlineLobbyClient.offerDraw()}
+              onAcceptDraw={() => onlineLobbyClient.acceptDraw()}
+              onDeclineDraw={() => onlineLobbyClient.declineDraw()}
+              onRequestRematch={() => onlineLobbyClient.requestRematch()}
+              onLeaveMatch={handleLeaveOnlineGame}
+              chatMessages={onlineChatMessages}
+              onSendChat={(text) => onlineLobbyClient.sendChat(text)}
+            />
+          ) : gameMode === 'aivsai' ? (
             <AiVsAiDualProfile
               whiteEnemy={whiteEnemy}
               whiteBot={whiteEnemy}
@@ -1074,6 +1519,16 @@ export default function App() {
                 setIsSelectorOpen(true);
               }}
             />
+          ) : gameMode === 'pvp' ? (
+            <HumanVsHumanProfile
+              currentTurn={game.turn() as PlayerColor}
+              inCheck={game.inCheck()}
+              isGameOver={isGameOver}
+              winner={winner}
+              capturedPieces={capturedPieces}
+              onFlipBoard={handleFlipBoard}
+              boardOrientation={playerColor}
+            />
           ) : (
             <EnemyProfile
               enemy={enemy}
@@ -1093,8 +1548,8 @@ export default function App() {
           {isDebugMode && debugAnalysis ? (
             <DebugTacticalOverlay
               analysis={debugAnalysis}
-              playerColor={gameMode === 'aivsai' ? (game.turn() as PlayerColor) : playerColor}
-              isPlayerTurn={gameMode === 'aivsai' ? true : game.turn() === playerColor}
+              playerColor={gameMode === 'aivsai' || gameMode === 'pvp' ? (game.turn() as PlayerColor) : playerColor}
+              isPlayerTurn={gameMode === 'aivsai' || gameMode === 'pvp' ? true : game.turn() === playerColor}
               onSelectMove={(cand) => {
                 handlePlayerMove(
                   cand.from,
@@ -1152,6 +1607,7 @@ export default function App() {
         isOpen={Boolean(pendingPromotion)}
         color={playerColor}
         onSelect={handleSelectPromotion}
+        pieceCustomization={pieceCustomization}
       />
 
       {/* Enemy Selector Modal */}
@@ -1176,17 +1632,40 @@ export default function App() {
         reason={gameOverReason}
         enemy={enemy}
         totalMoves={Math.ceil(history.length / 2)}
-        onRematch={() => (gameMode === 'aivsai' ? handleResetAiVsAiMatch() : handleResetGame())}
+        onRematch={() => {
+          if (gameMode === 'online') {
+            onlineLobbyClient.requestRematch();
+          } else if (gameMode === 'aivsai') {
+            handleResetAiVsAiMatch();
+          } else {
+            handleResetGame();
+          }
+        }}
         onChooseEnemy={() => {
           setIsGameOver(false);
-          setEnemySelectorTarget('single');
-          setIsSelectorOpen(true);
+          if (gameMode === 'online') {
+            setIsOnlineModalOpen(true);
+          } else {
+            setEnemySelectorTarget('single');
+            setIsSelectorOpen(true);
+          }
         }}
         onBackToTitle={() => {
           setIsGameOver(false);
-          setCurrentView('title');
+          if (gameMode === 'online') {
+            handleLeaveOnlineGame();
+          } else {
+            setCurrentView('title');
+          }
         }}
         isAiVsAi={gameMode === 'aivsai'}
+        isPvP={gameMode === 'pvp'}
+        isOnline={gameMode === 'online'}
+        onlineOpponentName={
+          onlineLobby && onlinePlayerId
+            ? (Object.values(onlineLobby.players) as OnlinePlayer[]).find((p) => p.id !== onlinePlayerId)?.name || 'Gegner'
+            : undefined
+        }
         whiteEnemy={whiteEnemy}
         whiteBot={whiteEnemy}
         blackEnemy={blackEnemy}
@@ -1200,6 +1679,25 @@ export default function App() {
         onSelectOpening={handleSelectOpening}
         currentOpeningId={detectedOpening?.opening.id}
         currentPlayerColor={playerColor}
+      />
+
+      {/* Online Multiplayer Lobby Modal */}
+      <OnlineLobbyModal
+        isOpen={isOnlineModalOpen}
+        onClose={() => setIsOnlineModalOpen(false)}
+        onStartOnlineGame={handleStartOnlineGame}
+        initialRoomCode={initialRoomCode}
+      />
+
+      {/* Piece Customizer & Setup Studio Modal */}
+      <PieceCustomizerModal
+        isOpen={isPieceCustomizerOpen}
+        onClose={() => setIsPieceCustomizerOpen(false)}
+        customization={pieceCustomization}
+        onChangeCustomization={handleUpdatePieceCustomization}
+        onRestartWithNewArmy={handleRestartWithNewArmy}
+        isGameInProgress={history.length > 0 && !isGameOver}
+        initialTab={pieceCustomizerTab}
       />
     </div>
   );

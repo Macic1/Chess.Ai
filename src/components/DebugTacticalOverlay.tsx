@@ -283,9 +283,28 @@ export const DebugTacticalOverlay: React.FC<DebugTacticalOverlayProps> = ({
             </button>
           </div>
 
-          {/* TAB 1: 3 Move Candidates - Clean, Scannable & Structured */}
+          {/* TAB 1: 3 Move Candidates - 3 Taktiken (Grün = Angriff, Blau = Solid/Verteidigung, Violett = Position/Zentrum) */}
           {activeSubTab === 'moves' && (
             <div className="space-y-1.5">
+              {/* Tactical Explanation Legend */}
+              <div className="flex items-center justify-between px-1 py-1 rounded-lg bg-stone-950/60 border border-stone-800/60 text-[10px] text-stone-400">
+                <span className="font-semibold text-stone-300">3 Taktik-Pfade:</span>
+                <div className="flex items-center gap-2">
+                  <span className="flex items-center gap-1 text-emerald-400 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    Angriff
+                  </span>
+                  <span className="flex items-center gap-1 text-sky-400 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                    Absicherung
+                  </span>
+                  <span className="flex items-center gap-1 text-purple-400 font-bold">
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400" />
+                    Strategie
+                  </span>
+                </div>
+              </div>
+
               {candidateMoves.length === 0 ? (
                 <div className="text-center py-3 text-xs text-stone-400">
                   Keine Züge verfügbar oder Partie beendet.
@@ -296,12 +315,6 @@ export const DebugTacticalOverlay: React.FC<DebugTacticalOverlayProps> = ({
                   const isTop1 = cand.rank === 1;
                   const isTop2 = cand.rank === 2;
 
-                  const colorClass = isTop1
-                    ? 'emerald'
-                    : isTop2
-                    ? 'sky'
-                    : 'purple';
-
                   return (
                     <div
                       key={cand.rank}
@@ -309,7 +322,7 @@ export const DebugTacticalOverlay: React.FC<DebugTacticalOverlayProps> = ({
                       onMouseEnter={() => onHoverCandidate(cand.rank)}
                       onMouseLeave={() => onHoverCandidate(null)}
                       onClick={() => onSelectMove(cand)}
-                      className={`group p-2 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                      className={`group p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
                         isTop1
                           ? isHovered
                             ? 'bg-emerald-950/60 border-emerald-400 ring-1 ring-emerald-400/50 shadow-md'
@@ -323,30 +336,43 @@ export const DebugTacticalOverlay: React.FC<DebugTacticalOverlayProps> = ({
                           : 'bg-stone-950/70 border-purple-500/30 hover:border-purple-500/60'
                       }`}
                     >
-                      {/* Left: Rank Badge + SAN + Move from/to */}
+                      {/* Left: Taktik-Farbbalken + Rank Badge + SAN + Move from/to */}
                       <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`w-5 h-5 rounded-md text-[10px] font-mono font-black flex items-center justify-center shrink-0 ${
-                            isTop1
-                              ? 'bg-emerald-500 text-stone-950'
-                              : isTop2
-                              ? 'bg-sky-500 text-stone-950'
-                              : 'bg-purple-500 text-stone-950'
-                          }`}
-                        >
-                          #{cand.rank}
-                        </span>
+                        <div className="flex flex-col items-center gap-1 shrink-0">
+                          <span
+                            className={`w-5 h-5 rounded-md text-[10px] font-mono font-black flex items-center justify-center ${
+                              isTop1
+                                ? 'bg-emerald-500 text-stone-950 shadow-xs'
+                                : isTop2
+                                ? 'bg-sky-500 text-stone-950 shadow-xs'
+                                : 'bg-purple-500 text-stone-950 shadow-xs'
+                            }`}
+                          >
+                            #{cand.rank}
+                          </span>
+                        </div>
 
                         <div className="min-w-0">
-                          <div className="flex items-baseline gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-mono font-extrabold text-sm text-white">
                               {cand.san}
                             </span>
                             <span className="text-[10px] font-mono text-stone-400">
                               ({cand.from}➔{cand.to})
                             </span>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border leading-tight ${
+                                isTop1
+                                  ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                                  : isTop2
+                                  ? 'bg-sky-500/20 text-sky-300 border-sky-500/40'
+                                  : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+                              }`}
+                            >
+                              {cand.tacticLabel || (isTop1 ? 'Offensiv & Angriff' : isTop2 ? 'Solide & Absicherung' : 'Strategie & Zentrum')}
+                            </span>
                           </div>
-                          <p className="text-[10px] text-stone-400 truncate max-w-[170px] sm:max-w-[210px]">
+                          <p className="text-[10.5px] text-stone-300 truncate max-w-[170px] sm:max-w-[210px] mt-0.5">
                             {cand.explanation}
                           </p>
                         </div>
@@ -384,7 +410,7 @@ export const DebugTacticalOverlay: React.FC<DebugTacticalOverlayProps> = ({
                               ? 'bg-sky-500 hover:bg-sky-400'
                               : 'bg-purple-500 hover:bg-purple-400'
                           }`}
-                          title="Diesen Zug spielen"
+                          title="Diesen Taktik-Zug spielen"
                         >
                           <Play className="w-3 h-3 fill-current" />
                         </button>

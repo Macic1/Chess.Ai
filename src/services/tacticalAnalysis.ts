@@ -14,6 +14,8 @@ export interface PlannedMoveStep {
 
 export interface CandidateMoveOption {
   rank: number; // 1, 2, or 3
+  tacticType: 'aggressive' | 'solid' | 'positional';
+  tacticLabel: string; // e.g. "Angriff & Druck", "Solide Verteidigung", "Zentrumskontrolle"
   move: Move;
   san: string;
   from: Square;
@@ -222,7 +224,13 @@ function calculatePlannedLine(
 }
 
 /**
- * Calculates top 2 to 3 candidate moves for the active side
+ * Calculates 3 tactical candidate moves for the active side,
+ * representing 3 distinct tactical doctrines:
+ * 1. 🟢 Grün (Emerald): Aggressiver Angriff & Schlagzug / Mattangriff
+ * 2. 🔵 Blau (Sky): Solide Verteidigung & Königssicherheit / Festigung
+ * 3. 🟣 Violett (Purple): Positioneller Raumgewinn & Zentrumskontrolle
+ *
+ * If a move is made, these three tactics are dynamically recalculated for the new position!
  */
 export function getTopCandidateMoves(game: Chess, playerColor: PlayerColor): CandidateMoveOption[] {
   const legalMoves = game.moves({ verbose: true });
@@ -231,79 +239,154 @@ export function getTopCandidateMoves(game: Chess, playerColor: PlayerColor): Can
   const turn = game.turn();
   const isTurnWhite = turn === 'w';
 
-  // Evaluate each legal move with 1-ply search + piece capture heuristics
-  const scoredMoves: { move: Move; score: number }[] = [];
+  interface MoveEvaluation {
+    move: Move;
+    baseScore: number;
+    aggressiveScore: number;
+    solidScore: number;
+    positionalScore: number;
+  }
+
+  const evaluatedList: MoveEvaluation[] = [];
 
   for (const move of legalMoves) {
     try {
       game.move(move);
-      let score = evaluateBoard(game);
+      let baseScore = evaluateBoard(game);
+      if (!isTurnWhite) baseScore = -baseScore;
 
-      // Invert score if calculating for black
-      if (!isTurnWhite) {
-        score = -score;
+      const isMate = game.isCheckmate();
+      const inChk = game.inCheck();
+      const isCapt = Boolean(move.captured);
+      const isCastle = move.san === 'O-O' || move.san === 'O-O-O';
+      const target = move.to;
+      const isCenter = ['d4', 'd5', 'e4', 'e5'].includes(target);
+      const isExtendedCenter = ['c4', 'c5', 'f4', 'f5', 'd3', 'e3', 'd6', 'e6'].includes(target);
+
+      if (isMate) baseScore += 50000;
+      else if (inChk) baseScore += 35;
+
+      // Aggressive doctrine: heavy rewards for checks, captures, attacking high-value targets
+      let aggressiveScore = baseScore;
+      if (isCapt) aggressiveScore += 60;
+      if (inChk) aggressiveScore += 45;
+      if (isMate) aggressiveScore += 100000;
+      if (move.piece === 'q' || move.piece === 'r' || move.piece === 'n') aggressiveScore += 15;
+
+      // Solid doctrine: heavy rewards for castling, king safety, protecting attacked pieces, quiet defensive steps
+      let solidScore = baseScore;
+      if (isCastle) solidScore += 90;
+      if (!isCapt && !inChk) solidScore += 20; // calmness
+      if (['f2', 'g2', 'h2', 'f7', 'g7', 'h7', 'c2', 'b2', 'c7', 'b7'].includes(target) && (move.piece === 'k' || move.piece === 'r')) {
+        solidScore += 30; // king shield
       }
 
-      // Bonus points for checkmate, checks, or promotions
-      if (game.isCheckmate()) {
-        score += 50000;
-      } else if (game.inCheck()) {
-        score += 35;
-      }
+      // Positional doctrine: rewards for center occupation, piece harmonization, pawn structures
+      let positionalScore = baseScore;
+      if (isCenter) positionalScore += 50;
+      else if (isExtendedCenter) positionalScore += 25;
+      if (['n', 'b'].includes(move.piece) && (isCenter || isExtendedCenter)) positionalScore += 35;
+      if (move.piece === 'p' && (isCenter || isExtendedCenter)) positionalScore += 30;
 
-      scoredMoves.push({ move, score });
+      evaluatedList.push({
+        move,
+        baseScore,
+        aggressiveScore,
+        solidScore,
+        positionalScore,
+      });
+
       game.undo();
     } catch {
       // ignore
     }
   }
 
-  // Sort descending (best first for the side to move)
-  scoredMoves.sort((a, b) => b.score - a.score);
+  // Sort candidates by overall best score first
+  evaluatedList.sort((a, b) => b.baseScore - a.baseScore);
 
-  // Take top 3 distinct moves
-  const topMoves = scoredMoves.slice(0, 3);
-
-  const colorsConfig: {
+  // Pick 3 moves prioritizing distinct tactical flavors:
+  // 1. Emerald (Aggressive): top aggressive move
+  // 2. Sky (Solid): top solid move (distinct)
+  // 3. Purple (Positional): top positional/space move (distinct)
+  const selectedMoves: {
+    move: Move;
+    score: number;
+    tacticType: 'aggressive' | 'solid' | 'positional';
+    tacticLabel: string;
     colorName: 'emerald' | 'sky' | 'purple';
     badgeColor: string;
     arrowColor: string;
     ringColor: string;
-  }[] = [
-    {
+  }[] = [];
+
+  const usedSans = new Set<string>();
+
+  // Slot 1: Aggressive / Angriff (Emerald)
+  const aggressiveSorted = [...evaluatedList].sort((a, b) => b.aggressiveScore - a.aggressiveScore);
+  const bestAggressive = aggressiveSorted[0];
+  if (bestAggressive) {
+    selectedMoves.push({
+      move: bestAggressive.move,
+      score: bestAggressive.baseScore,
+      tacticType: 'aggressive',
+      tacticLabel: 'Offensiv & Angriff',
       colorName: 'emerald',
-      badgeColor: '#10b981', // Emerald 500
+      badgeColor: '#10b981',
       arrowColor: '#10b981',
       ringColor: 'ring-emerald-500 bg-emerald-500/20 text-emerald-300 border-emerald-500/50',
-    },
-    {
+    });
+    usedSans.add(bestAggressive.move.san);
+  }
+
+  // Slot 2: Solid / Sicherheit & Verteidigung (Sky)
+  const solidSorted = [...evaluatedList]
+    .filter((m) => !usedSans.has(m.move.san))
+    .sort((a, b) => b.solidScore - a.solidScore);
+  const bestSolid = solidSorted[0] || evaluatedList.find((m) => !usedSans.has(m.move.san));
+  if (bestSolid) {
+    selectedMoves.push({
+      move: bestSolid.move,
+      score: bestSolid.baseScore,
+      tacticType: 'solid',
+      tacticLabel: 'Solide & Absicherung',
       colorName: 'sky',
-      badgeColor: '#0ea5e9', // Sky 500
+      badgeColor: '#0ea5e9',
       arrowColor: '#0ea5e9',
       ringColor: 'ring-sky-500 bg-sky-500/20 text-sky-300 border-sky-500/50',
-    },
-    {
+    });
+    usedSans.add(bestSolid.move.san);
+  }
+
+  // Slot 3: Positional / Zentrum & Struktur (Purple)
+  const positionalSorted = [...evaluatedList]
+    .filter((m) => !usedSans.has(m.move.san))
+    .sort((a, b) => b.positionalScore - a.positionalScore);
+  const bestPositional = positionalSorted[0] || evaluatedList.find((m) => !usedSans.has(m.move.san));
+  if (bestPositional) {
+    selectedMoves.push({
+      move: bestPositional.move,
+      score: bestPositional.baseScore,
+      tacticType: 'positional',
+      tacticLabel: 'Strategie & Zentrum',
       colorName: 'purple',
-      badgeColor: '#a855f7', // Purple 500
+      badgeColor: '#a855f7',
       arrowColor: '#a855f7',
       ringColor: 'ring-purple-500 bg-purple-500/20 text-purple-300 border-purple-500/50',
-    },
-  ];
+    });
+    usedSans.add(bestPositional.move.san);
+  }
 
-  return topMoves.map((sm, index) => {
+  return selectedMoves.map((sm, index) => {
     const rank = index + 1;
-    const cfg = colorsConfig[index % colorsConfig.length];
     const { title, explanation } = getTacticalExplanation(sm.move, game, rank);
-
-    // Convert centipawn to win % for the current turn player
-    // Note: sm.score was adjusted so higher is better for current turn player
     const winPct = centipawnsToWinPercentage(sm.score);
-
-    // Calculate multi-step planned line ahead (4 plies = 2 player moves, 2 opponent responses)
     const plannedLine = calculatePlannedLine(game, sm.move, 4);
 
     return {
       rank,
+      tacticType: sm.tacticType,
+      tacticLabel: sm.tacticLabel,
       move: sm.move,
       san: sm.move.san,
       from: sm.move.from as Square,
@@ -312,10 +395,10 @@ export function getTopCandidateMoves(game: Chess, playerColor: PlayerColor): Can
       winPercentage: winPct,
       title,
       explanation,
-      colorName: cfg.colorName,
-      badgeColor: cfg.badgeColor,
-      arrowColor: cfg.arrowColor,
-      ringColor: cfg.ringColor,
+      colorName: sm.colorName,
+      badgeColor: sm.badgeColor,
+      arrowColor: sm.arrowColor,
+      ringColor: sm.ringColor,
       plannedLine,
     };
   });

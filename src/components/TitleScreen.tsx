@@ -14,10 +14,14 @@ import {
   MessageSquare,
   Award,
   User,
+  Users,
+  Globe,
   Gauge,
   BookOpen,
+  ChevronRight,
+  Layers,
 } from 'lucide-react';
-import { AIEnemy, PlayerColor, BoardTheme } from '../types';
+import { AIEnemy, PlayerColor, BoardTheme, PieceCustomizationState } from '../types';
 import { AI_ENEMIES } from '../data/enemies';
 import { PieceIcon } from './PieceIcon';
 import { EnemyAvatar } from './EnemyAvatar';
@@ -32,11 +36,17 @@ interface TitleScreenProps {
   onSelectTheme?: (theme: BoardTheme) => void;
   onStartGame: (enemy: AIEnemy, color: PlayerColor, theme?: BoardTheme) => void;
   onStartAiVsAi?: (whiteEnemy: AIEnemy, blackEnemy: AIEnemy, theme?: BoardTheme, speedMs?: number) => void;
+  onStartPvP?: (theme?: BoardTheme) => void;
   hasActiveGame: boolean;
   onResumeGame: () => void;
   soundEnabled: boolean;
   onToggleSound: () => void;
+  pieceCustomization?: PieceCustomizationState;
+  onOpenPieceCustomizer?: (tab?: 'editor' | 'white' | 'black' | 'army' | 'presets') => void;
+  onToggleCustomPieces?: (enabled: boolean) => void;
   onOpenOpenings?: () => void;
+  onOpenLearningPath?: () => void;
+  onOpenOnlineLobby?: () => void;
 }
 
 export const TitleScreen: React.FC<TitleScreenProps> = ({
@@ -48,14 +58,20 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   onSelectTheme,
   onStartGame,
   onStartAiVsAi,
+  onStartPvP,
   hasActiveGame,
   onResumeGame,
   soundEnabled,
   onToggleSound,
+  pieceCustomization,
+  onOpenPieceCustomizer,
+  onToggleCustomPieces,
   onOpenOpenings,
+  onOpenLearningPath,
+  onOpenOnlineLobby,
 }) => {
   const safeSelected = selectedEnemy || AI_ENEMIES[1];
-  const [activeMode, setActiveMode] = useState<'pvai' | 'aivsai'>('pvai');
+  const [activeMode, setActiveMode] = useState<'pvai' | 'pvp' | 'online' | 'aivsai'>('pvai');
   const [chosenColor, setChosenColor] = useState<'w' | 'b' | 'random'>(playerColor);
   const [currentTheme, setCurrentTheme] = useState<BoardTheme>(selectedTheme);
   const [whiteBot, setWhiteBot] = useState<AIEnemy>(AI_ENEMIES[1]);
@@ -76,6 +92,14 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
   const handleLaunchAiVsAi = () => {
     if (onStartAiVsAi) {
       onStartAiVsAi(whiteBot, blackBot, currentTheme, aiSpeedMs);
+    }
+  };
+
+  const handleLaunchPvP = () => {
+    if (onStartPvP) {
+      onStartPvP(currentTheme);
+    } else {
+      onStartGame(safeSelected, 'w', currentTheme);
     }
   };
 
@@ -126,6 +150,30 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         </div>
 
         <div className="flex items-center gap-2.5">
+          {onOpenOnlineLobby && (
+            <button
+              id="title-btn-online-lobby-header"
+              onClick={onOpenOnlineLobby}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 transition cursor-pointer shadow-md text-xs font-bold"
+              title="Online-Multiplayer Lobby erstellen oder per Code beitreten"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>Online-Lobby</span>
+            </button>
+          )}
+
+          {onOpenLearningPath && (
+            <button
+              id="title-btn-learning-path-header"
+              onClick={onOpenLearningPath}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-400/10 hover:from-amber-500/30 hover:to-amber-400/20 border border-amber-500/40 text-amber-300 transition cursor-pointer shadow-sm text-xs font-bold"
+              title="Interaktiven Schach-Lernpfad mit 18 Stationen öffnen"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-amber-400" />
+              <span>Schach-Lernpfad</span>
+            </button>
+          )}
+
           <button
             id="title-sound-toggle"
             onClick={onToggleSound}
@@ -181,17 +229,46 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
             initial={{ y: 8, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.15, duration: 0.4 }}
-            className="text-xs sm:text-sm text-stone-400 max-w-lg mx-auto mb-5"
+            className="text-xs sm:text-sm text-stone-400 max-w-lg mx-auto mb-4"
           >
             5 authentische Schachspieler mit eigenen Spielstilen, ELO-Stärken und lebendigen Dialogen.
           </motion.p>
 
-          {/* Mode Switcher: Spieler vs KI | KI gegen KI */}
-          <div className="inline-flex items-center justify-center p-1 rounded-2xl bg-stone-900/90 border border-stone-800 shadow-xl max-w-sm w-full backdrop-blur-xs">
+          {/* Interactive Learning Path Banner */}
+          {onOpenLearningPath && (
+            <div className="w-full max-w-md mx-auto mb-4">
+              <button
+                id="title-btn-open-learning-path"
+                onClick={onOpenLearningPath}
+                className="w-full p-3 rounded-2xl bg-gradient-to-r from-amber-500/15 via-stone-900 to-amber-500/10 border border-amber-500/40 hover:border-amber-400 text-stone-200 hover:text-white flex items-center justify-between gap-3 transition-all cursor-pointer group shadow-lg hover:shadow-amber-500/10"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 group-hover:scale-110 transition-transform">
+                    <BookOpen className="w-4 h-4" />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-xs font-black text-amber-300 flex items-center gap-2">
+                      <span>SCHACH-LERNPFAD</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/25 text-amber-200 font-mono">18 Lektionen</span>
+                    </div>
+                    <div className="text-[11px] text-stone-400">
+                      Rochade, Springergabel, Spieße, Mattmuster & Endspiele interaktiv trainieren
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 text-xs font-bold text-amber-400 group-hover:translate-x-1 transition-transform">
+                  <ChevronRight className="w-4 h-4" />
+                </div>
+              </button>
+            </div>
+          )}
+
+          {/* Mode Switcher: Mensch vs KI | Mensch gegen Mensch | Online-Lobby | KI gegen KI */}
+          <div className="inline-flex items-center justify-center p-1 rounded-2xl bg-stone-900/90 border border-stone-800 shadow-xl max-w-2xl w-full backdrop-blur-xs flex-wrap sm:flex-nowrap gap-1">
             <button
               id="title-mode-pvai"
               onClick={() => setActiveMode('pvai')}
-              className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 activeMode === 'pvai'
                   ? 'bg-amber-500 text-stone-950 shadow-md shadow-amber-500/20'
                   : 'text-stone-400 hover:text-stone-200'
@@ -201,9 +278,36 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               <span>Mensch vs KI</span>
             </button>
             <button
+              id="title-mode-pvp"
+              onClick={() => setActiveMode('pvp')}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeMode === 'pvp'
+                  ? 'bg-amber-500 text-stone-950 shadow-md shadow-amber-500/20'
+                  : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Lokal (1 Gerät)</span>
+            </button>
+            <button
+              id="title-mode-online"
+              onClick={() => {
+                setActiveMode('online');
+                if (onOpenOnlineLobby) onOpenOnlineLobby();
+              }}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                activeMode === 'online'
+                  ? 'bg-amber-500 text-stone-950 shadow-md shadow-amber-500/20'
+                  : 'text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              <Globe className="w-4 h-4" />
+              <span>Online-Lobby</span>
+            </button>
+            <button
               id="title-mode-aivsai"
               onClick={() => setActiveMode('aivsai')}
-              className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 activeMode === 'aivsai'
                   ? 'bg-amber-500 text-stone-950 shadow-md shadow-amber-500/20'
                   : 'text-stone-400 hover:text-stone-200'
@@ -212,6 +316,83 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               <Swords className="w-4 h-4" />
               <span>KI gegen KI</span>
             </button>
+          </div>
+        </div>
+
+        {/* Global Game Type Setting: Regular Chess vs. Custom Pieces & Army per Player */}
+        <div className="w-full max-w-2xl mb-5 px-1">
+          <div className="bg-stone-900/90 border border-stone-800 rounded-2xl p-3.5 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                  pieceCustomization?.enabled
+                    ? 'bg-gradient-to-tr from-amber-500/20 to-rose-500/20 border-amber-500/40 text-amber-300 shadow-md'
+                    : 'bg-stone-800/80 border-stone-700 text-stone-300'
+                }`}
+              >
+                {pieceCustomization?.enabled ? (
+                  <Sparkles className="w-5 h-5" />
+                ) : (
+                  <PieceIcon type="k" color="w" className="w-7 h-7 drop-shadow-xs" />
+                )}
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-white flex items-center gap-2">
+                  <span>Figuren-Modus:</span>
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      pieceCustomization?.enabled
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        : 'bg-stone-800 text-stone-300 border border-stone-700'
+                    }`}
+                  >
+                    {pieceCustomization?.enabled ? 'Individuell (Custom)' : 'Regulär (Standard)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-400 truncate mt-0.5">
+                  {pieceCustomization?.enabled
+                    ? pieceCustomization.armySetup === 'custom'
+                      ? `Eigene Aufstellung: ${pieceCustomization.customPresetName || 'Freies Setup'} • Weiß: ${pieceCustomization.white.styleId} • Schwarz: ${pieceCustomization.black.styleId}`
+                      : `Weiß: ${pieceCustomization.white.styleId} • Schwarz: ${pieceCustomization.black.styleId} • ${
+                          pieceCustomization.armySetup === 'standard' ? '16 vs 16' : 'Sonder-Aufstellung'
+                        }`
+                    : 'Klassische Turnierfiguren und Standard 16 vs. 16 Aufstellung'}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0 flex-wrap">
+              <button
+                id="btn-toggle-regular-pieces"
+                onClick={() => onToggleCustomPieces?.(!pieceCustomization?.enabled)}
+                className="px-2.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-xs font-semibold text-stone-300 transition-colors cursor-pointer"
+              >
+                {pieceCustomization?.enabled ? 'Zu Regulär' : 'Zu Individuell'}
+              </button>
+
+              {onOpenPieceCustomizer && (
+                <>
+                  <button
+                    id="btn-open-board-editor"
+                    onClick={() => onOpenPieceCustomizer('editor')}
+                    className="px-3 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 border border-amber-500/40 text-amber-300 text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                    title="Figuren frei auf das Brett ziehen und eigenes Preset speichern"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-amber-400" />
+                    <span>Aufstellung bauen</span>
+                  </button>
+
+                  <button
+                    id="btn-open-title-customizer"
+                    onClick={() => onOpenPieceCustomizer('white')}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+                  >
+                    <Palette className="w-3.5 h-3.5" />
+                    <span>Design & Farben</span>
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
 
@@ -314,6 +495,139 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
           </motion.div>
         </AnimatePresence>
         </>
+        )}
+
+        {/* --- MODE PVP: MENSCH GEGEN MENSCH PREVIEW --- */}
+        {activeMode === 'pvp' && (
+          <div className="w-full max-w-5xl mb-6 flex flex-col gap-4">
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3 text-xs text-amber-200">
+              <div className="flex items-center gap-2.5">
+                <Users className="w-5 h-5 text-amber-400 shrink-0" />
+                <span>
+                  <strong>Lokaler 2-Spieler-Modus:</strong> Zwei Personen spielen abwechselnd am selben Bildschirm. Der taktische Zugvorschlag mit den 3 farbigen Pfeilen (Aggressiv, Solide, Positionell) passt sich bei jedem Zug live an die jeweilige Farbe an!
+                </span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Spieler 1 (Weiß) */}
+              <div className="p-5 rounded-2xl bg-stone-900/90 border border-stone-800 flex items-center justify-between shadow-lg">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-stone-100 border border-stone-300 flex items-center justify-center text-stone-950 font-black text-2xl shadow-md">
+                    W
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">1. Zug</span>
+                    <h3 className="text-base font-bold text-white">Spieler 1 (Weiß)</h3>
+                    <p className="text-xs text-stone-400">Eröffnet die Partie mit den weißen Figuren</p>
+                  </div>
+                </div>
+                <div className="px-3 py-1 rounded-full bg-stone-800 text-stone-300 text-xs font-semibold">
+                  Mensch
+                </div>
+              </div>
+
+              {/* Spieler 2 (Schwarz) */}
+              <div className="p-5 rounded-2xl bg-stone-900/90 border border-stone-800 flex items-center justify-between shadow-lg">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-stone-950 border border-stone-700 flex items-center justify-center text-stone-100 font-black text-2xl shadow-md">
+                    S
+                  </div>
+                  <div>
+                    <span className="text-xs font-semibold uppercase tracking-wider text-stone-400">Antwortet</span>
+                    <h3 className="text-base font-bold text-white">Spieler 2 (Schwarz)</h3>
+                    <p className="text-xs text-stone-400">Reagiert mit den schwarzen Figuren</p>
+                  </div>
+                </div>
+                <div className="px-3 py-1 rounded-full bg-stone-800 text-stone-300 text-xs font-semibold">
+                  Mensch
+                </div>
+              </div>
+            </div>
+
+            {/* Online option banner */}
+            <div className="p-4 rounded-2xl bg-stone-900/60 border border-stone-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 text-xs text-stone-300">
+                <Globe className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Möchtest du auf zwei verschiedenen Geräten spielen? Erstelle eine Online-Lobby mit Code & Farbauslosung!</span>
+              </div>
+              {onOpenOnlineLobby && (
+                <button
+                  type="button"
+                  onClick={onOpenOnlineLobby}
+                  className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs transition cursor-pointer shrink-0 shadow-sm"
+                >
+                  Online-Lobby öffnen
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* --- MODE ONLINE: MULTIPLAYER LOBBY PREVIEW --- */}
+        {activeMode === 'online' && (
+          <div className="w-full max-w-5xl mb-6 flex flex-col gap-4">
+            <div className="p-5 rounded-2xl bg-gradient-to-r from-amber-500/15 via-stone-900/90 to-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-4 text-stone-200">
+              <div className="flex items-center gap-3.5">
+                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400 shrink-0">
+                  <Globe className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    Online Multiplayer Schach
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold">
+                      Live Code-Lobby
+                    </span>
+                  </h3>
+                  <p className="text-xs text-stone-400">
+                    Erstelle einen 6-stelligen Raum-Code, teile ihn mit einer zweiten Person und spielt in Echtzeit gegeneinander.
+                  </p>
+                </div>
+              </div>
+
+              {onOpenOnlineLobby && (
+                <button
+                  type="button"
+                  onClick={onOpenOnlineLobby}
+                  className="px-5 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-bold text-sm transition shadow-lg shadow-amber-500/20 cursor-pointer shrink-0"
+                >
+                  Lobby jetzt öffnen
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div className="p-4 rounded-2xl bg-stone-900/80 border border-stone-800">
+                <div className="w-8 h-8 rounded-xl bg-stone-800 text-amber-400 flex items-center justify-center font-bold text-xs mb-2">
+                  1
+                </div>
+                <h4 className="text-sm font-bold text-white mb-1">Code teilen</h4>
+                <p className="text-xs text-stone-400">
+                  Generiere mit einem Klick eine private Lobby und teile den 6-stelligen Code oder Direktlink.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-stone-900/80 border border-stone-800">
+                <div className="w-8 h-8 rounded-xl bg-stone-800 text-amber-400 flex items-center justify-center font-bold text-xs mb-2">
+                  2
+                </div>
+                <h4 className="text-sm font-bold text-white mb-1">Farbauslosung</h4>
+                <p className="text-xs text-stone-400">
+                  Sobald der Gast beitritt, werden Weiß und Schwarz automatisch und unparteiisch per Zufall verlost.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-stone-900/80 border border-stone-800">
+                <div className="w-8 h-8 rounded-xl bg-stone-800 text-amber-400 flex items-center justify-center font-bold text-xs mb-2">
+                  3
+                </div>
+                <h4 className="text-sm font-bold text-white mb-1">Echtzeit-Partie</h4>
+                <p className="text-xs text-stone-400">
+                  Jeder Zug wird live synchronisiert, inklusive Chat, Remis-Angeboten und Revanche-Option.
+                </p>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* --- MODE 2: KI GEGEN KI DUELL --- */}
@@ -486,7 +800,7 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
         </div>
 
         {/* 4. Start-Aktionen */}
-        {activeMode === 'pvai' ? (
+        {activeMode === 'pvai' && (
           <div className="w-full max-w-xl bg-stone-900/80 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-xl mb-6">
             <div className="text-xs font-semibold text-stone-400 uppercase tracking-wider mb-3 text-center">
               Deine Spielfarbe
@@ -570,7 +884,60 @@ export const TitleScreen: React.FC<TitleScreenProps> = ({
               </div>
             )}
           </div>
-        ) : (
+        )}
+
+        {/* --- MODE PVP: MENSCH GEGEN MENSCH --- */}
+        {activeMode === 'pvp' && (
+          <div className="w-full max-w-xl bg-stone-900/80 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-xl mb-6">
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-xs flex items-center gap-3 mb-4">
+              <Users className="w-5 h-5 text-amber-400 shrink-0" />
+              <span>
+                <strong>Mensch gegen Mensch:</strong> Zwei Personen spielen abwechselnd am selben Bildschirm. Der taktische Zugvorschlag mit den 3 farbigen Taktiken (Aggressiv, Solide, Positionell) passt sich bei jedem Zug dynamisch für den jeweils aktiven Spieler an!
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                id="title-btn-start-pvp"
+                onClick={handleLaunchPvP}
+                className="flex-1 py-3.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-stone-950 font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg shadow-amber-500/25 transition-transform active:scale-[0.98] cursor-pointer"
+              >
+                <Users className="w-5 h-5" />
+                <span>Mensch gegen Mensch starten</span>
+              </button>
+
+              {hasActiveGame && (
+                <button
+                  id="title-btn-resume-game-pvp"
+                  onClick={onResumeGame}
+                  className="py-3.5 px-5 rounded-xl bg-stone-800 hover:bg-stone-700 border border-stone-700 text-white font-semibold text-sm sm:text-base flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                >
+                  <RotateCcw className="w-4 h-4 text-amber-400" />
+                  <span>Fortsetzen</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* --- MODE ONLINE: LAUNCH BUTTONS --- */}
+        {activeMode === 'online' && (
+          <div className="w-full max-w-xl bg-stone-900/80 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-xl mb-6">
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                id="title-btn-start-online"
+                onClick={onOpenOnlineLobby}
+                className="flex-1 py-3.5 px-6 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 hover:from-amber-400 hover:to-amber-300 text-stone-950 font-bold text-sm sm:text-base flex items-center justify-center gap-2.5 shadow-lg shadow-amber-500/25 transition-transform active:scale-[0.98] cursor-pointer"
+              >
+                <Globe className="w-5 h-5" />
+                <span>Online-Lobby betreten</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* --- MODE 3: KI GEGEN KI DUELL --- */}
+        {activeMode === 'aivsai' && (
           <div className="w-full max-w-xl bg-stone-900/80 border border-stone-800 rounded-2xl p-4 sm:p-5 shadow-xl mb-6">
             <div className="flex flex-col sm:flex-row gap-3">
               <button

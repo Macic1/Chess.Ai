@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Chess, Square, Move } from 'chess.js';
-import { PlayerColor, PieceType, BoardTheme } from '../types';
+import { PlayerColor, PieceType, BoardTheme, PieceCustomizationState } from '../types';
 import { CandidateMoveOption, AttackedPieceInfo, EnemyLastMoveInfo, PlannedMoveStep } from '../services/tacticalAnalysis';
 import { PieceIcon } from './PieceIcon';
 import { motion, AnimatePresence } from 'motion/react';
-import { Palette } from 'lucide-react';
+import { Palette, Sparkles } from 'lucide-react';
 
 export { type BoardTheme };
 
@@ -18,7 +18,11 @@ export interface ChessBoardProps {
   hintMove: { from: Square; to: Square } | null;
   theme?: BoardTheme;
   onThemeChange?: (theme: BoardTheme) => void;
+  pieceCustomization?: PieceCustomizationState;
+  onOpenPieceCustomizer?: () => void;
   isAiVsAi?: boolean;
+  isPvP?: boolean;
+  isOnline?: boolean;
   debugMode?: boolean;
   candidateMoves?: CandidateMoveOption[];
   hoveredCandidateRank?: number | null;
@@ -131,7 +135,11 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   hintMove,
   theme = 'green',
   onThemeChange,
+  pieceCustomization,
+  onOpenPieceCustomizer,
   isAiVsAi = false,
+  isPvP = false,
+  isOnline = false,
   debugMode = false,
   candidateMoves = [],
   hoveredCandidateRank = null,
@@ -164,7 +172,12 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
   }, [lastMove]);
 
   const boardRef = useRef<HTMLDivElement>(null);
-  const isPlayerTurn = !isAiVsAi && game.turn() === playerColor && !isAiThinking && !isGameOver;
+  const activeTurnColor = isPvP ? (game.turn() as PlayerColor) : playerColor;
+  const isPlayerTurn = isPvP
+    ? !isGameOver
+    : isOnline
+    ? game.turn() === playerColor && !isGameOver
+    : !isAiVsAi && game.turn() === playerColor && !isAiThinking && !isGameOver;
 
   const handleSetTheme = (newTheme: BoardTheme) => {
     setCurrentTheme(newTheme);
@@ -405,7 +418,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
         const piece = game.get(selectedSquare);
         const isPromotion =
           piece?.type === 'p' &&
-          ((playerColor === 'w' && square[1] === '8') || (playerColor === 'b' && square[1] === '1'));
+          ((activeTurnColor === 'w' && square[1] === '8') || (activeTurnColor === 'b' && square[1] === '1'));
 
         const success = onMove(selectedSquare, square, isPromotion ? 'q' : undefined);
         if (success) {
@@ -445,8 +458,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
     const clickedPiece = game.get(square);
 
-    // 1. If clicked on an ENEMY piece:
-    if (clickedPiece && clickedPiece.color !== playerColor) {
+    // 1. If clicked on an ENEMY piece (in non-PvP mode):
+    if (!isPvP && clickedPiece && clickedPiece.color !== playerColor) {
       setSelectedSquare(null);
       setLegalMoves([]);
 
@@ -466,8 +479,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
 
     // 2. If an enemy piece is currently selected or squares are marked:
     if (enemySelectedSquare || markedSquares.size > 0) {
-      // If clicking player's own piece, allow normal move selection
-      if (clickedPiece && clickedPiece.color === playerColor && isPlayerTurn) {
+      // If clicking current player's piece, allow normal move selection
+      if (clickedPiece && clickedPiece.color === activeTurnColor && isPlayerTurn) {
         setEnemySelectedSquare(null);
         setMarkedSquares(new Set());
         setSelectedSquare(square);
@@ -489,8 +502,8 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       return;
     }
 
-    // 3. Normal selection of player piece
-    if (clickedPiece && clickedPiece.color === playerColor && isPlayerTurn) {
+    // 3. Normal selection of moving player piece
+    if (clickedPiece && clickedPiece.color === activeTurnColor && isPlayerTurn) {
       setSelectedSquare(square);
       const moves = game.moves({ square, verbose: true });
       setLegalMoves(moves);
@@ -519,7 +532,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       return;
     }
     const piece = game.get(square);
-    if (!piece || piece.color !== playerColor) {
+    if (!piece || piece.color !== activeTurnColor) {
       e.preventDefault();
       return;
     }
@@ -546,7 +559,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
       const piece = game.get(draggedSquare);
       const isPromotion =
         piece?.type === 'p' &&
-        ((playerColor === 'w' && targetSquare[1] === '8') || (playerColor === 'b' && targetSquare[1] === '1'));
+        ((activeTurnColor === 'w' && targetSquare[1] === '8') || (activeTurnColor === 'b' && targetSquare[1] === '1'));
 
       const success = onMove(draggedSquare, targetSquare, isPromotion ? 'q' : undefined);
       if (success) {
@@ -614,6 +627,22 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
               </button>
             );
           })}
+          {onOpenPieceCustomizer && (
+            <button
+              id="btn-open-piece-customizer"
+              onClick={onOpenPieceCustomizer}
+              title="Figuren-Anpassung: Regulär oder Individuell pro Spieler"
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold transition cursor-pointer border ml-1 ${
+                pieceCustomization?.enabled
+                  ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-xs'
+                  : 'text-stone-300 hover:text-white bg-stone-800/80 hover:bg-stone-700/80 border-stone-700'
+              }`}
+            >
+              <Sparkles className="w-3 h-3 text-amber-400" />
+              <span className="hidden sm:inline">Figuren:</span>
+              <span>{pieceCustomization?.enabled ? 'Individuell' : 'Regulär'}</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -1075,7 +1104,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                         }`}
                       />
 
-                      {/* Top-Right Badge: Rank & Win Probability */}
+                      {/* Top-Right Badge: Rank & Win Probability & Taktik-Kürzel */}
                       <div className="absolute top-0.5 right-0.5 z-25 pointer-events-none flex items-center shadow-xs">
                         <div
                           className={`flex items-center gap-0.5 px-1 py-0.2 rounded text-[7.5px] font-mono font-bold border shadow-xs leading-none ${
@@ -1085,7 +1114,7 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                               ? 'bg-sky-600 text-white border-sky-400/70'
                               : 'bg-purple-600 text-white border-purple-400/70'
                           }`}
-                          title={`Tipp #${candidateTarget.rank}: ${candidateTarget.san} (${candidateTarget.winPercentage}% Siegchance)`}
+                          title={`Taktik #${candidateTarget.rank} (${candidateTarget.tacticLabel || 'Taktik'}): ${candidateTarget.san} (${candidateTarget.winPercentage}% Siegchance)`}
                         >
                           <span className="opacity-90">#{candidateTarget.rank}</span>
                           <span className="font-extrabold">{candidateTarget.winPercentage}%</span>
@@ -1135,6 +1164,13 @@ export const ChessBoard: React.FC<ChessBoardProps> = ({
                         type={piece.type as PieceType}
                         color={piece.color as PlayerColor}
                         className="w-full h-full drop-shadow-[0_4px_5px_rgba(0,0,0,0.4)]"
+                        customization={
+                          pieceCustomization?.enabled
+                            ? piece.color === 'w'
+                              ? pieceCustomization.white
+                              : pieceCustomization.black
+                            : undefined
+                        }
                       />
                     </motion.div>
                   )}

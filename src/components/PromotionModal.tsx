@@ -1,5 +1,5 @@
 import React from 'react';
-import { PieceType, PlayerColor } from '../types';
+import { PieceType, PlayerColor, PieceCustomizationState } from '../types';
 import { PieceIcon } from './PieceIcon';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -7,9 +7,15 @@ interface PromotionModalProps {
   isOpen: boolean;
   color: PlayerColor;
   onSelect: (piece: PieceType) => void;
+  pieceCustomization?: PieceCustomizationState;
 }
 
-export const PromotionModal: React.FC<PromotionModalProps> = ({ isOpen, color, onSelect }) => {
+export const PromotionModal: React.FC<PromotionModalProps> = ({
+  isOpen,
+  color,
+  onSelect,
+  pieceCustomization,
+}) => {
   if (!isOpen) return null;
 
   const choices: { type: PieceType; label: string }[] = [
@@ -18,6 +24,13 @@ export const PromotionModal: React.FC<PromotionModalProps> = ({ isOpen, color, o
     { type: 'b', label: 'Läufer' },
     { type: 'n', label: 'Springer' },
   ];
+
+  const customization =
+    pieceCustomization?.enabled
+      ? color === 'w'
+        ? pieceCustomization.white
+        : pieceCustomization.black
+      : undefined;
 
   return (
     <AnimatePresence>
@@ -44,7 +57,12 @@ export const PromotionModal: React.FC<PromotionModalProps> = ({ isOpen, color, o
                 onClick={() => onSelect(c.type)}
                 className="flex flex-col items-center justify-center p-3 rounded-xl bg-stone-800 hover:bg-amber-500/20 hover:border-amber-500/50 border border-stone-700 transition cursor-pointer group"
               >
-                <PieceIcon type={c.type} color={color} className="w-9 h-9 transition-transform" />
+                <PieceIcon
+                  type={c.type}
+                  color={color}
+                  className="w-9 h-9 transition-transform"
+                  customization={customization}
+                />
                 <span className="text-[10px] font-semibold text-stone-300 mt-1">{c.label}</span>
               </motion.button>
             ))}

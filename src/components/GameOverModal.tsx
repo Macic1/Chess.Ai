@@ -17,6 +17,9 @@ interface GameOverModalProps {
   onChooseEnemy: () => void;
   onBackToTitle?: () => void;
   isAiVsAi?: boolean;
+  isPvP?: boolean;
+  isOnline?: boolean;
+  onlineOpponentName?: string;
   whiteEnemy?: AIEnemy;
   whiteBot?: AIEnemy;
   blackEnemy?: AIEnemy;
@@ -34,6 +37,9 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   onChooseEnemy,
   onBackToTitle,
   isAiVsAi = false,
+  isPvP = false,
+  isOnline = false,
+  onlineOpponentName,
   whiteEnemy,
   whiteBot,
   blackEnemy,
@@ -43,7 +49,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   const safeWhite = whiteEnemy || whiteBot || safeEnemy;
   const safeBlack = blackEnemy || blackBot || safeEnemy;
 
-  const isPlayerWinner = !isAiVsAi && winner === playerColor;
+  const isPlayerWinner = (!isAiVsAi && !isPvP) && winner === playerColor;
   const isDraw = winner === 'draw';
 
   const winningEnemy = isAiVsAi
@@ -134,6 +140,14 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <h3 className="text-2xl font-black text-stone-100 tracking-tight">
               {isDraw
                 ? 'REMIS'
+                : isOnline
+                ? isPlayerWinner
+                  ? 'ONLINE-SIEG!'
+                  : 'ONLINE-NIEDERLAGE'
+                : isPvP
+                ? winner === 'w'
+                  ? 'MENSCH (WEISS) GEWINNT!'
+                  : 'MENSCH (SCHWARZ) GEWINNT!'
                 : isAiVsAi
                 ? `${winningEnemy?.name || 'KI'} GEWINNT!`
                 : isPlayerWinner
@@ -144,7 +158,17 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
 
           {/* Character Words / Duel Overview */}
-          {isAiVsAi && winningEnemy ? (
+          {isOnline ? (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center gap-3 text-center text-amber-200 text-xs">
+              <span>
+                Online-Partie gegen {onlineOpponentName || 'Gegner'}: {isDraw ? 'Unentschieden!' : isPlayerWinner ? 'Herzlichen Glückwunsch zum Sieg!' : 'Kopf hoch, versuche eine Revanche!'}
+              </span>
+            </div>
+          ) : isPvP ? (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center gap-3 text-center text-amber-200 text-xs">
+              <span>Mensch gegen Mensch: Spieler {winner === 'w' ? 'Weiß' : 'Schwarz'} hat das Duell gewonnen!</span>
+            </div>
+          ) : isAiVsAi && winningEnemy ? (
             <div className="p-4 rounded-2xl bg-stone-950/70 border border-stone-800 flex items-center gap-3 text-left">
               <EnemyAvatar avatarKey={winningEnemy?.avatar || 'felix'} mood="confident" className="w-12 h-12 shrink-0" />
               <div>
@@ -173,8 +197,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               <strong className="text-stone-100 text-sm font-mono">{totalMoves}</strong>
             </div>
             <div className="p-2.5 rounded-xl bg-stone-800/60 border border-stone-700/60">
-              <span className="text-stone-400 block text-[11px]">Gegner Wertung</span>
-              <strong className="text-stone-100 text-sm font-mono">{enemy.rating} ELO</strong>
+              <span className="text-stone-400 block text-[11px]">{isOnline ? 'Modus' : 'Gegner Wertung'}</span>
+              <strong className="text-stone-100 text-sm font-mono">{isOnline ? 'Online-Lobby' : `${enemy.rating} ELO`}</strong>
             </div>
           </div>
 
@@ -188,7 +212,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-sm shadow-md transition cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>Revanche</span>
+              <span>{isOnline ? 'Revanche fordern' : 'Revanche'}</span>
             </motion.button>
             <motion.button
               whileHover={{ scale: 1.02 }}
@@ -198,7 +222,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 font-semibold text-sm border border-stone-700 transition cursor-pointer"
             >
               <Swords className="w-4 h-4 text-amber-400" />
-              <span>Anderer Gegner</span>
+              <span>{isOnline ? 'Lobby wechseln' : 'Anderer Gegner'}</span>
             </motion.button>
           </div>
 
